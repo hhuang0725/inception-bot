@@ -65,8 +65,8 @@ class InceptionNet(nn.Module):
           nn.Flatten(),
           nn.Linear(32 * 8 * 8, 128),
           nn.GELU(),
-          nn.Linear(128, 3),
-          nn.Softmax(dim=-1)
+          nn.Linear(128, 1),
+          nn.Tanh()
       )      
     
     def forward(self, x):
@@ -80,9 +80,3 @@ class InceptionNet(nn.Module):
       p, v = self.policy_head(x), self.value_head(x)
       
       return p, v
-    
-    def loss(self, p, v, y_p, y_v):
-      p_loss = F.cross_entropy(p, y_p)
-      v_loss = F.cross_entropy(v, y_v, label_smoothing=0.1)
-
-      return p_loss, v_loss

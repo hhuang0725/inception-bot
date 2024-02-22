@@ -1,3 +1,4 @@
+import numpy as np
 import chess
 
 # 1968
@@ -249,21 +250,3 @@ idxToUci = [
     "g2g1q", "g2g1r", "g2g1b", "g2g1n", "g2h1q", "g2h1r", "g2h1b", "g2h1n",
     "h2g1q", "h2g1r", "h2g1b", "h2g1n", "h2h1q", "h2h1r", "h2h1b", "h2h1n"]
 uciToIdx = dict(zip(idxToUci, range(len(idxToUci))))
-
-sqIdx = {
-    'a': 0,
-    'b': 1,
-    'c': 2,
-    'd': 3,
-    'e': 4,
-    'f': 5,
-    'g': 6,
-    'h': 7
-}
-
-def sqToIdx(sq: str) -> (int, int):
-  """
-  Converts a sqaure into an (x, y) pair.
-  """
-  letter = chess.square_name(sq)
-  return 8 - int(letter[1]), sqIdx[letter[0]]
