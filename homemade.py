@@ -5,10 +5,13 @@ With these classes, bot makers will not have to implement the UCI or XBoard inte
 """
 import chess
 from chess.engine import PlayResult, Limit
-import random
-from lib.engine_wrapper import MinimalEngine
-from lib.lichess_types import MOVE, HOMEMADE_ARGS_TYPE
 import logging
+import torch
+from typing import Any
+
+from lib.engine_wrapper import MinimalEngine
+from model.inception_net import InceptionNet
+from model.mcts import MCTS
 
 
 # Use this logger variable to print messages to the console or log files.
@@ -16,81 +19,45 @@ import logging
 # logger.debug("message") will only print "message" if verbose logging is enabled.
 logger = logging.getLogger(__name__)
 
+torch.set_default_device("cuda" if torch.cuda.is_available() else "cpu")
 
 class ExampleEngine(MinimalEngine):
-    """An example engine that all homemade engines inherit."""
+  """An example engine that all homemade engines inherit."""
 
+class inception_bot(MinimalEngine):
+  model = InceptionNet(14, 180, 180, 5)
+  model.load_state_dict(torch.load("model/inception_net_pretrained.pt"))
+  model.eval()
 
-# Bot names and ideas from tom7's excellent eloWorld video
+  mcts = MCTS(model)
 
-class RandomMove(ExampleEngine):
-    """Get a random move."""
+  def search(self, board: chess.Board, time_limit: Limit, *args: Any) -> PlayResult:
+    if isinstance(time_limit.time, float):
+      time = time_limit.time
+      inc = 0
+    elif board.turn == chess.WHITE:
+      time = time_limit.white_clock if isinstance(time_limit.white_clock, float) else 0
+      inc = time_limit.white_inc if isinstance(time_limit.white_inc, float) else 0
+    else:
+      time = time_limit.black_clock if isinstance(time_limit.black_clock, float) else 0
+      inc = time_limit.black_inc if isinstance(time_limit.black_inc, float) else 0
 
-    def search(self, board: chess.Board, *args: HOMEMADE_ARGS_TYPE) -> PlayResult:  # noqa: ARG002
-        """Choose a random move."""
-        return PlayResult(random.choice(list(board.legal_moves)), None)
-
-
-class Alphabetical(ExampleEngine):
-    """Get the first move when sorted by san representation."""
-
-    def search(self, board: chess.Board, *args: HOMEMADE_ARGS_TYPE) -> PlayResult:  # noqa: ARG002
-        """Choose the first move alphabetically."""
-        moves = list(board.legal_moves)
-        moves.sort(key=board.san)
-        return PlayResult(moves[0], None)
-
-
-class FirstMove(ExampleEngine):
-    """Get the first move when sorted by uci representation."""
-
-    def search(self, board: chess.Board, *args: HOMEMADE_ARGS_TYPE) -> PlayResult:  # noqa: ARG002
-        """Choose the first move alphabetically in uci representation."""
-        moves = list(board.legal_moves)
-        moves.sort(key=str)
-        return PlayResult(moves[0], None)
-
-
-class ComboEngine(ExampleEngine):
-    """
-    Get a move using multiple different methods.
-
-    This engine demonstrates how one can use `time_limit`, `draw_offered`, and `root_moves`.
-    """
-
-    def search(self,
-               board: chess.Board,
-               time_limit: Limit,
-               ponder: bool,  # noqa: ARG002
-               draw_offered: bool,
-               root_moves: MOVE) -> PlayResult:
-        """
-        Choose a move using multiple different methods.
-
-        :param board: The current position.
-        :param time_limit: Conditions for how long the engine can search (e.g. we have 10 seconds and search up to depth 10).
-        :param ponder: Whether the engine can ponder after playing a move.
-        :param draw_offered: Whether the bot was offered a draw.
-        :param root_moves: If it is a list, the engine should only play a move that is in `root_moves`.
-        :return: The move to play.
-        """
-        if isinstance(time_limit.time, int):
-            my_time = time_limit.time
-            my_inc = 0
-        elif board.turn == chess.WHITE:
-            my_time = time_limit.white_clock if isinstance(time_limit.white_clock, int) else 0
-            my_inc = time_limit.white_inc if isinstance(time_limit.white_inc, int) else 0
-        else:
-            my_time = time_limit.black_clock if isinstance(time_limit.black_clock, int) else 0
-            my_inc = time_limit.black_inc if isinstance(time_limit.black_inc, int) else 0
-
-        possible_moves = root_moves if isinstance(root_moves, list) else list(board.legal_moves)
-
-        if my_time / 60 + my_inc > 10:
-            # Choose a random move.
-            move = random.choice(possible_moves)
-        else:
-            # Choose the first move alphabetically in uci representation.
-            possible_moves.sort(key=str)
-            move = possible_moves[0]
-        return PlayResult(move, None, draw_offered=draw_offered)
+    if inc >= 3:
+      return PlayResult(self.mcts.search(board, 125), None)
+    elif inc >= 2:
+      if time >= 90:
+        return PlayResult(self.mcts.search(board, 125), None)
+      else:
+        return PlayResult(self.mcts.search(board, 100), None)
+    elif inc >= 1:
+      if time >= 120:
+        return PlayResult(self.mcts.search(board, 125), None)
+      elif time >= 60:
+        return PlayResult(self.mcts.search(board, 75), None)
+      else:
+        return PlayResult(self.mcts.search(board, 50), None)
+    
+    if time >= 60:
+      return PlayResult(self.mcts.search(board, 75), None)
+    
+    return PlayResult(self.mcts.search(board, 25), None)
